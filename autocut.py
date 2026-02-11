@@ -36,6 +36,7 @@ try:
     from rich.table import Table
     from rich.text import Text
     from rich import box
+    from rich.markup import escape
 
     RICH_AVAILABLE = True
 except ImportError:
@@ -675,7 +676,7 @@ class ConsoleUI:
     def print_error(self, message: str):
         if self.use_rich:
             self.console.print(
-                f"        [bold red]\u2717 Error:[/bold red] {message}"
+                f"        [bold red]\u2717 Error:[/bold red] {escape(message)}"
             )
         else:
             print(f"        [ERROR] {message}")
@@ -856,6 +857,7 @@ def main():
         sensitivity=args.sensitivity,
         min_scene_duration=args.min_scene,
         min_cut_duration=args.min_cut,
+        trim_start=args.trim_start,
     )
 
     # --- Process each video ---
