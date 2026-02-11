@@ -74,6 +74,7 @@ DEFAULT_SCALE_FACTOR = 0.25
 DEFAULT_SENSITIVITY = 0.5
 DEFAULT_MIN_SCENE_DURATION = 2.0
 DEFAULT_MIN_CUT_DURATION = 0.5
+DEFAULT_TRIM_START = 0.8  # seconds to trim from the start of each scene
 
 
 # ============================================================================
@@ -200,12 +201,14 @@ class VideoAnalyzer:
         sensitivity: float = DEFAULT_SENSITIVITY,
         min_scene_duration: float = DEFAULT_MIN_SCENE_DURATION,
         min_cut_duration: float = DEFAULT_MIN_CUT_DURATION,
+        trim_start: float = DEFAULT_TRIM_START,
     ):
         self.frame_skip = max(1, frame_skip)
         self.scale_factor = max(0.1, min(1.0, scale_factor))
         self.sensitivity = max(0.0, min(1.0, sensitivity))
         self.min_scene_duration = max(0.5, min_scene_duration)
         self.min_cut_duration = max(0.1, min_cut_duration)
+        self.trim_start = max(0.0, trim_start)
 
     def analyze(self, video_path: Path, video_info: dict, progress_callback=None) -> dict:
         """Analyze video and return detected good segments.
@@ -272,12 +275,18 @@ class VideoAnalyzer:
                 )
                 mag, _ = cv2.cartToPolar(flow[..., 0], flow[..., 1])
 
-                # Mean magnitude: overall camera movement
+                # Mean magnitude: overall camera movement speed
                 avg_mag = np.mean(mag)
-                # Std of flow: captures chaotic / non-uniform motion
+                # Std of flow vectors: captures chaotic / non-uniform motion
+                # Smooth pan → all pixels move the same direction → low std
+                # Shake/jerk → pixels move in different directions → high std
                 flow_std = np.std(flow[..., 0]) + np.std(flow[..., 1])
-                # Combined score: penalize chaotic motion more than smooth pans
-                score = avg_mag * 0.5 + flow_std * 0.5
+                # Peak motion: sudden spikes indicate jerky transitions
+                peak_mag = np.percentile(mag, 95)
+
+                # Combined score: heavily penalize chaos and jerkiness,
+                # smooth slow pans (high avg_mag but low flow_std) get low score
+                score = avg_mag * 0.2 + flow_std * 0.55 + peak_mag * 0.25
 
                 motion_scores.append(score)
             else:
@@ -364,6 +373,16 @@ class VideoAnalyzer:
         # Merge segments with very short gaps between them
         min_cut_frames = int(self.min_cut_duration * fps)
         segments = self._merge_close_segments(segments, min_cut_frames)
+
+        # Trim the start of each scene (camera settling / focus adjustment)
+        if self.trim_start > 0:
+            trim_frames = int(self.trim_start * fps)
+            trimmed = []
+            for s, e in segments:
+                new_start = s + trim_frames
+                if new_start < e and (e - new_start) >= min_scene_frames:
+                    trimmed.append((new_start, e))
+            segments = trimmed
 
         # Safety: if everything was cut, keep the most stable portion
         if not segments:
@@ -756,6 +775,17 @@ def parse_args():
         default=DEFAULT_MIN_CUT_DURATION,
         metavar="SEC",
         help=f"Minimum gap between scenes to actually cut (default: {DEFAULT_MIN_CUT_DURATION})",
+    )
+
+    parser.add_argument(
+        "--trim-start",
+        type=float,
+        default=DEFAULT_TRIM_START,
+        metavar="SEC",
+        help=(
+            f"Trim N seconds from the start of each scene (default: {DEFAULT_TRIM_START}). "
+            "Removes camera settling, focus adjustment, zoom setup at scene start."
+        ),
     )
 
     parser.add_argument(
