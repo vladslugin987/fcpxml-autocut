@@ -21,26 +21,29 @@ from fractions import Fraction
 import cv2
 import numpy as np
 
-try:
-    from rich.console import Console
-    from rich.progress import (
-        Progress,
-        BarColumn,
-        TextColumn,
-        TimeRemainingColumn,
-        TimeElapsedColumn,
-        TaskProgressColumn,
-        SpinnerColumn,
-    )
-    from rich.panel import Panel
-    from rich.table import Table
-    from rich.text import Text
-    from rich import box
-    from rich.markup import escape
+# In frozen exe (PyInstaller) skip Rich to avoid missing rich._unicode_data.* at runtime
+RICH_AVAILABLE = False
+if not getattr(sys, "frozen", False):
+    try:
+        from rich.console import Console
+        from rich.progress import (
+            Progress,
+            BarColumn,
+            TextColumn,
+            TimeRemainingColumn,
+            TimeElapsedColumn,
+            TaskProgressColumn,
+            SpinnerColumn,
+        )
+        from rich.panel import Panel
+        from rich.table import Table
+        from rich.text import Text
+        from rich import box
+        from rich.markup import escape
 
-    RICH_AVAILABLE = True
-except ImportError:
-    RICH_AVAILABLE = False
+        RICH_AVAILABLE = True
+    except ImportError:
+        pass
 
 # ============================================================================
 # Constants
