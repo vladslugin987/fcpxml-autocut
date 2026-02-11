@@ -1,0 +1,85 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: fcpxml-autocut-windows
+            exe_name: fcpxml-autocut.exe
+            exe_path: dist/fcpxml-autocut.exe
+          - os: macos-latest
+            artifact_name: fcpxml-autocut-macos
+            exe_name: fcpxml-autocut
+            exe_path: dist/fcpxml-autocut
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable
+        run: |
+          pyinstaller --onefile --name fcpxml-autocut --console autocut.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.exe_path }}
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fcpxml-autocut-windows
+          path: release/windows
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fcpxml-autocut-macos
+          path: release/macos
+
+      - name: Rename artifacts
+        run: |
+          mv release/windows/fcpxml-autocut.exe release/fcpxml-autocut-windows.exe
+          mv release/macos/fcpxml-autocut release/fcpxml-autocut-macos
+          chmod +x release/fcpxml-autocut-macos
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            release/fcpxml-autocut-windows.exe
+            release/fcpxml-autocut-macos
