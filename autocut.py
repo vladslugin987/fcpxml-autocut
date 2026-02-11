@@ -829,6 +829,15 @@ def parse_args():
 # ============================================================================
 
 
+def wait_before_exit(exit_code: int = 0) -> None:
+    """Pause before closing so the user can read the output (especially when running as exe)."""
+    if exit_code != 0 or getattr(sys, "frozen", False):
+        try:
+            input("\nPress Enter to exit...")
+        except (EOFError, KeyboardInterrupt):
+            pass
+
+
 def main():
     args = parse_args()
 
@@ -839,12 +848,14 @@ def main():
     work_dir = Path(args.directory).resolve()
     if not work_dir.exists():
         ui.print_error(f"Directory not found: {work_dir}")
+        wait_before_exit(1)
         sys.exit(1)
 
     videos = discover_videos(work_dir)
     ui.print_scan_info(work_dir, len(videos))
 
     if not videos:
+        wait_before_exit(0)
         sys.exit(0)
 
     output_dir = Path(args.output_dir).resolve() if args.output_dir else work_dir
@@ -931,6 +942,13 @@ def main():
         files_generated=files_generated,
     )
 
+    wait_before_exit(0)
+
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        print(f"\nError: {exc}")
+        wait_before_exit(1)
+        sys.exit(1)
